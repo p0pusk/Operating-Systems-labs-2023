@@ -1,10 +1,12 @@
 #include "daemon.h"
 
+#include <csignal>
+#include <fstream>
 #include <sys/syslog.h>
 
 #include <cstdlib>
 
-Daemon& Daemon::getInstance(std::string config_path) {
+Daemon &Daemon::getInstance(std::string config_path) {
   static Daemon instance(config_path);
   return instance;
 }
@@ -12,6 +14,29 @@ Daemon& Daemon::getInstance(std::string config_path) {
 Daemon::Daemon(std::string config_path) {}
 
 void Daemon::run() {
+  Daemon::killPrev();
+  Daemon::forkProc();
+
+  syslog(LOG_NOTICE, "kekis");
+}
+
+void Daemon::handleSignal(int signum) {
+  switch (signum) {
+  case SIGHUP:
+    syslog(LOG_NOTICE, "sighup singal");
+    break;
+  case SIGTERM:
+    syslog(LOG_NOTICE, "Daemon terminated");
+    closelog();
+    exit(EXIT_SUCCESS);
+    break;
+  default:
+    syslog(LOG_NOTICE, "unknown signal");
+    break;
+  }
+}
+
+void Daemon::forkProc() {
   pid_t pid = 0;
   int fd;
 
@@ -23,7 +48,7 @@ void Daemon::run() {
     exit(EXIT_FAILURE);
   }
 
-  /* Success: Let the parent terminate */
+  /* Let the parent terminate */
   if (pid > 0) {
     exit(EXIT_SUCCESS);
   }
@@ -44,7 +69,7 @@ void Daemon::run() {
     exit(EXIT_FAILURE);
   }
 
-  /* Success: Let the parent terminate */
+  /* Let the parent terminate */
   if (pid > 0) {
     exit(EXIT_SUCCESS);
   }
@@ -53,7 +78,6 @@ void Daemon::run() {
   umask(0);
 
   /* Change the working directory to the root directory */
-  /* or another appropriated directory */
   chdir("/");
 
   /* Close all open file descriptors */
@@ -61,10 +85,17 @@ void Daemon::run() {
     close(fd);
   }
 
-  openlog("daemon_test", LOG_PID, LOG_DAEMON);
+  std::signal(SIGHUP, handleSignal);
 
   std::ofstream f(pid_fp, std::ios_base::trunc);
   f << getpid();
+}
 
-  syslog(LOG_NOTICE, "kekis");
+void Daemon::killPrev() {
+  pid_t pid;
+  std::fstream f(pid_fp);
+
+  f >> pid;
+  kill(pid, SIGTERM);
+  syslog(LOG_NOTICE, "terminated previous daemon");
 }

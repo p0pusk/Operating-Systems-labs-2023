@@ -2,8 +2,13 @@
 #include <iostream>
 
 #include "daemon.h"
+#include <chrono>
+#include <sys/syslog.h>
+#include <thread>
 
-int32_t main(int argc, char* argv[]) {
+int32_t main(int argc, char *argv[]) {
+  openlog("daemon_test", LOG_PID, LOG_DAEMON);
+
   std::string config_file;
   if (argc == 1) {
     config_file = "config.txt";
@@ -13,7 +18,13 @@ int32_t main(int argc, char* argv[]) {
     std::cout << "Uncorrent count of arguments" << std::endl;
     return 1;
   }
-  Daemon& daemon = Daemon::getInstance(config_file);
+
+  Daemon &daemon = Daemon::getInstance(config_file);
   daemon.run();
+
+  while (true) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  }
+
   return 0;
 }

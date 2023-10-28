@@ -1,1 +1,4 @@
-g++ -std=c++17 -o test daemon.cpp main.cpp
+sudo touch /var/run/daemon.pid
+cmake -Bbuild
+
+cd ./build && make
