@@ -32,7 +32,7 @@ void Daemon::run() {
 
   try {
     getInstance().loadConfig();
-  } catch (std::exception e) {
+  } catch (std::runtime_error e) {
     syslog(LOG_ERR, "%s", e.what());
     closelog();
     exit(EXIT_FAILURE);
