@@ -4,15 +4,17 @@
 #include <syslog.h>
 #include <unistd.h>
 
-#include <csignal>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <string>
+#include <vector>
+
+using folders = std::vector<std::pair<std::filesystem::path, int>>;
 
 class Daemon {
  public:
-  static Daemon& getInstance(std::string config_path);
+  static Daemon& getInstance();
+  void setConfigPath(std::string const& path);
   void run();
 
   Daemon(Daemon const&) = delete;
@@ -20,12 +22,16 @@ class Daemon {
 
  private:
   Daemon() = default;
-  Daemon(std::string config_path);
 
   void forkProc();
   void killPrev();
   void loadConfig();
   static void handleSignal(int signum);
-  std::filesystem::path pid_fp =
+
+  uint32_t interval = 50;
+  folders trackedFolders;
+
+  const std::filesystem::path pid_path =
       std::filesystem::absolute("/var/run/daemon.pid");
+  std::filesystem::path config_path = std::filesystem::absolute("config.txt");
 };
