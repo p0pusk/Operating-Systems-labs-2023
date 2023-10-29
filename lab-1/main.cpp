@@ -1,12 +1,13 @@
+#include <sys/syslog.h>
+
+#include <chrono>
 #include <cstdint>
 #include <iostream>
-
-#include "daemon.h"
-#include <chrono>
-#include <sys/syslog.h>
 #include <thread>
 
-int32_t main(int argc, char *argv[]) {
+#include "daemon.h"
+
+int32_t main(int argc, char* argv[]) {
   openlog("daemon_test", LOG_PID, LOG_DAEMON);
 
   std::string config_file;
@@ -19,7 +20,7 @@ int32_t main(int argc, char *argv[]) {
     return 1;
   }
 
-  Daemon &daemon = Daemon::getInstance(config_file);
+  Daemon& daemon = Daemon::getInstance(config_file);
   daemon.run();
 
   while (true) {

@@ -1,12 +1,12 @@
 #include "daemon.h"
 
-#include <csignal>
-#include <fstream>
 #include <sys/syslog.h>
 
+#include <csignal>
 #include <cstdlib>
+#include <fstream>
 
-Daemon &Daemon::getInstance(std::string config_path) {
+Daemon& Daemon::getInstance(std::string config_path) {
   static Daemon instance(config_path);
   return instance;
 }
@@ -17,22 +17,22 @@ void Daemon::run() {
   Daemon::killPrev();
   Daemon::forkProc();
 
-  syslog(LOG_NOTICE, "kekis");
+  syslog(LOG_NOTICE, "daemon started");
 }
 
 void Daemon::handleSignal(int signum) {
   switch (signum) {
-  case SIGHUP:
-    syslog(LOG_NOTICE, "sighup singal");
-    break;
-  case SIGTERM:
-    syslog(LOG_NOTICE, "Daemon terminated");
-    closelog();
-    exit(EXIT_SUCCESS);
-    break;
-  default:
-    syslog(LOG_NOTICE, "unknown signal");
-    break;
+    case SIGHUP:
+      syslog(LOG_NOTICE, "sighup singal");
+      break;
+    case SIGTERM:
+      syslog(LOG_NOTICE, "Daemon terminated");
+      closelog();
+      exit(EXIT_SUCCESS);
+      break;
+    default:
+      syslog(LOG_NOTICE, "unknown signal");
+      break;
   }
 }
 
@@ -89,13 +89,15 @@ void Daemon::forkProc() {
 
   std::ofstream f(pid_fp, std::ios_base::trunc);
   f << getpid();
+  f.close();
 }
 
 void Daemon::killPrev() {
   pid_t pid;
   std::fstream f(pid_fp);
-
   f >> pid;
+  f.close();
+
   kill(pid, SIGTERM);
   syslog(LOG_NOTICE, "terminated previous daemon");
 }
