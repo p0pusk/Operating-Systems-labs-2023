@@ -27,18 +27,19 @@ void Daemon::setConfigPath(std::string const& path) {
 }
 
 void Daemon::run() {
+  syslog(LOG_NOTICE, "INFO: Daemon starting ...");
   Daemon::killPrev();
   Daemon::forkProc();
 
   try {
     getInstance().loadConfig();
-  } catch (std::runtime_error e) {
-    syslog(LOG_ERR, "%s", e.what());
+  } catch (std::runtime_error& e) {
+    syslog(LOG_ERR, "ERROR: %s", e.what());
     closelog();
     exit(EXIT_FAILURE);
   }
 
-  syslog(LOG_NOTICE, "Daemon started");
+  syslog(LOG_NOTICE, "INFO: Daemon started");
 
   while (true) {
     std::this_thread::sleep_for(std::chrono::milliseconds(interval * 1000));
@@ -52,8 +53,8 @@ void Daemon::run() {
       }
 
       while (!s.empty()) {
-        syslog(LOG_NOTICE, "%s",
-               ("removed:" + s.top().generic_string()).c_str());
+        syslog(LOG_NOTICE, "INFO: %s",
+               ("removed" + s.top().generic_string()).c_str());
         fs::remove_all(s.top());
         s.pop();
       }
@@ -67,20 +68,18 @@ void Daemon::handleSignal(int signum) {
       getInstance().loadConfig();
       break;
     case SIGTERM:
-      syslog(LOG_NOTICE, "Daemon terminated");
+      syslog(LOG_NOTICE, "INFO: Daemon terminated");
       closelog();
       exit(EXIT_SUCCESS);
       break;
     default:
-      syslog(LOG_NOTICE, "Unknown signal");
+      syslog(LOG_NOTICE, "ERROR: Unknown signal");
       break;
   }
 }
 
 void Daemon::forkProc() {
   pid_t pid = 0;
-  int fd;
-
   pid = fork();
 
   if (pid < 0) exit(EXIT_FAILURE);
@@ -96,6 +95,7 @@ void Daemon::forkProc() {
   umask(0);
   chdir("/");
 
+  int fd;
   for (fd = sysconf(_SC_OPEN_MAX); fd > 0; fd--) {
     close(fd);
   }
@@ -115,8 +115,9 @@ void Daemon::killPrev() {
   fs.close();
 
   /* if process exists */
-  if (0 == kill(pid, 0)) {
+  if (0 == kill(pid, 0) && pid != 0) {
     kill(pid, SIGTERM);
+    syslog(LOG_NOTICE, "INFO: Killing existing process...");
   }
 }
 
@@ -145,6 +146,6 @@ void Daemon::loadConfig() {
     trackedFolders.emplace_back(std::pair<fs::path, int>(path, depth));
   }
 
-  syslog(LOG_NOTICE, "Loaded config");
+  syslog(LOG_NOTICE, "INFO: Loaded config");
   fs.close();
 }
