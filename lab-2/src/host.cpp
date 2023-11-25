@@ -55,7 +55,7 @@ void Host::create_client(ConnectionType id) {
   }
 }
 
-std::string Host::await_line(std::string path) {
+static std::string await_line(std::string path) {
   std::ifstream fin(path);
   std::string res;
   fin >> res;

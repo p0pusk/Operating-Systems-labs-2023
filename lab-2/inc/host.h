@@ -3,6 +3,7 @@
 #include <sched.h>
 #include <semaphore.h>
 
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -22,5 +23,4 @@ class Host {
   pid_t host_pid;
 
   void open_term(pid_t pid);
-  std::string await_line(std::string path);
 };
