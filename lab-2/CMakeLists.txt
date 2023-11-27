@@ -7,6 +7,7 @@ set (
   SRC
   ./src/host.cpp
   ./src/conn_pipe.cpp
+  ./src/client.cpp
 )
 
 add_executable(host ${SRC})

@@ -7,20 +7,24 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Iconn.h"
+#include "client.h"
+#include "conn.h"
 
 class Host {
  public:
-  Host();
-  ~Host();
+  static Host& getInstance();
   void create_client(ConnectionType id);
   void run();
 
-  std::unordered_map<pid_t, IConn*> connections;
+  Host(Host const&) = delete;
+  void operator=(Host const&) = delete;
+
+  inline static std::unordered_map<pid_t, Client*> s_clients;
 
  private:
-  sem_t* semaphore;
-  pid_t host_pid;
+  Host();
+  ~Host();
 
-  void open_term(pid_t pid);
+  sem_t* m_semaphore;
+  pid_t m_host_pid;
 };
