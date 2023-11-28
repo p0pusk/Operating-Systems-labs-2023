@@ -2,7 +2,7 @@
 
 set -xe
 
-CFLAGS="-std=c++17 -Wall -Wextra"
-SRC="./main.cpp"
-
-clang++ $SRC $CFLAGS -o lab2
+cmake -Bbuild && cd ./build && make
+cd ..
+cp ./build/host .
+rm -rf ./build
