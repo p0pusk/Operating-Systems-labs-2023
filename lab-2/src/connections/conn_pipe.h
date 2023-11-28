@@ -13,9 +13,7 @@ class ConnPipe : public IConn {
   ~ConnPipe();
   bool read(void* buf, size_t size) override;
   bool write(void* buf, size_t size) override;
-  void open_term();
 
  private:
-  int m_ptoc_desc[2];
-  int m_ctop_desc[2];
+  int m_desc[2];
 };

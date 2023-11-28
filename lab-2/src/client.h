@@ -10,18 +10,20 @@ class Client {
   Client() = delete;
   ~Client();
 
-  void open_term();
+  void run();
 
-  pid_t m_client_pid;
+  pid_t m_pid_client;
   std::unique_ptr<IConn> m_conn;
 
- protected:
-  pid_t m_host_pid;
-  sem_t* m_sem;
+ private:
+  pid_t m_pid_host;
+  sem_t* m_sem_client;
+  sem_t* m_sem_host;
+  sem_t* m_sem_write;
+  ConnectionType m_conn_type;
   std::filesystem::path m_term_stdin;
   std::filesystem::path m_term_stdout;
 
- private:
-  pid_t m_term_pid;
-  ConnectionType m_conn_type;
+  void open_term();
+  void fork_term_listener();
 };

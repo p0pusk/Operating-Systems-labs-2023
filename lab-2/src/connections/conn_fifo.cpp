@@ -12,7 +12,6 @@ ConnFifo::ConnFifo(pid_t host_pid) {
     std::filesystem::create_directory("/tmp/lab2");
   }
 
-  m_host_pid = host_pid;
   mkfifo(m_fifo.c_str(), 0666);
   m_fd = open(m_fifo.c_str(), O_RDWR | O_NONBLOCK);
 }

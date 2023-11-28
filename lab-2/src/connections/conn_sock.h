@@ -14,6 +14,7 @@ class ConnSocket : public IConn {
   bool read(void* buf, size_t size) override;
 
  private:
-  int m_host_fd;
-  int m_client_fd;
+  int m_host_domain;
+  int m_client_domain;
+  const int PORT = 6969;
 };

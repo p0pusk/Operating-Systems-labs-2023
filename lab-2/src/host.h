@@ -24,6 +24,14 @@ class Host {
   Host();
   ~Host();
 
-  sem_t* m_semaphore;
-  pid_t m_host_pid;
+  void fork_terminal();
+  void open_terminal();
+
+  const std::filesystem::path m_term_in = "/tmp/lab2/host.in";
+  const std::filesystem::path m_term_out = "/tmp/lab2/host.out";
+  sem_t* m_sem_client;
+  sem_t* m_sem_host;
+  sem_t* m_sem_write;
+  inline static pid_t s_pid_host;
+  inline static pid_t s_pid_terminal;
 };

@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <climits>
 #include <csignal>
 #include <cstring>
 #include <format>
@@ -16,6 +17,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -25,21 +27,32 @@
 #include "conn_pipe.h"
 
 Client::Client(ConnectionType conn_type) {
-  m_sem = sem_open("/host", 0);
-  if (m_sem == SEM_FAILED) {
-    sem_close(m_sem);
+  m_sem_client = sem_open("/client", 0);
+  if (m_sem_client == SEM_FAILED) {
     syslog(LOG_ERR, "ERROR: failed to open semaphore");
     exit(1);
   }
 
-  m_host_pid = getpid();
+  m_sem_host = sem_open("/host", 0);
+  if (m_sem_client == SEM_FAILED) {
+    syslog(LOG_ERR, "ERROR: failed to open semaphore");
+    exit(1);
+  }
+
+  m_sem_write = sem_open("/sem_write", 0);
+  if (m_sem_write == SEM_FAILED) {
+    syslog(LOG_ERR, "ERROR: failed to open semaphore");
+    exit(1);
+  }
+
+  m_pid_host = getpid();
   m_conn_type = conn_type;
   switch (conn_type) {
     case ConnectionType::PIPE:
-      m_conn = std::make_unique<ConnPipe>(m_host_pid);
+      m_conn = std::make_unique<ConnPipe>(m_pid_host);
       break;
     case ConnectionType::FIFO:
-      m_conn = std::make_unique<ConnFifo>(m_host_pid);
+      m_conn = std::make_unique<ConnFifo>(m_pid_host);
       break;
     default:
       assert(1);
@@ -54,48 +67,31 @@ Client::Client(ConnectionType conn_type) {
     case 0:
       prctl(PR_SET_NAME, "client");
       syslog(LOG_INFO, "INFO: client started");
-      m_client_pid = getpid();
+      m_pid_client = getpid();
       break;
     default:
-      m_client_pid = pid;
-      break;
+      m_pid_client = pid;
+      return;
   }
+
+  m_term_stdin = std::format("/tmp/lab2/{}.in", getpid());
+  m_term_stdout = std::format("/tmp/lab2/{}.out", getpid());
+  std::ofstream in(m_term_stdin);
+  std::ofstream out(m_term_stdout);
 }
 
 Client::~Client() {
-  sem_close(m_sem);
+  sem_close(m_sem_client);
+  sem_close(m_sem_host);
+  sem_close(m_sem_write);
 }
 
-void Client::open_term() {
-  if (getpid() != m_client_pid) return;
+void Client::run() {
+  if (getpid() != m_pid_client) return;
 
-  m_term_stdin = std::format("/tmp/lab2/in{}.file", getpid());
-  m_term_stdout = std::format("/tmp/lab2/out{}.file", getpid());
-  std::ofstream _(m_term_stdin);
-  _.close();
-  std::ofstream fout(m_term_stdout);
-
-  m_term_pid = fork();
-  switch (m_term_pid) {
-    case -1:
-      syslog(LOG_ERR, "ERROR: in fork(), client terminating");
-      exit(1);
-      break;
-    case 0:
-      prctl(PR_SET_PDEATHSIG, SIGTERM);
-      int res = execl("/usr/bin/kitty", "kitty", "--", "bash", "-c",
-                      std::format("cp /dev/stdin {} | tail -f {}",
-                                  m_term_stdin.c_str(), m_term_stdout.c_str())
-                          .c_str(),
-                      (char*)NULL);
-      if (res < 0) {
-        syslog(LOG_ERR, "ERROR: in execl(), client terminating");
-        exit(1);
-      }
-      break;
-  }
-
+  fork_term_listener();
   syslog(LOG_INFO, "INFO: created terminal for client");
+
   std::string conn;
   switch (m_conn_type) {
     case ConnectionType::PIPE:
@@ -104,38 +100,104 @@ void Client::open_term() {
     case ConnectionType::FIFO:
       conn = "FIFO";
       break;
+    default:
+      break;
   }
-  fout << std::format(
+
+  std::ofstream term(m_term_stdout);
+  term << std::format(
               "You are in child process {}, connection type: \"{}\". Type "
               "something:",
-              m_client_pid, conn)
+              m_pid_client, conn)
        << std::endl;
 
-  std::signal(SIGCHLD, SIG_IGN);
+  char buf[1000];
+  while (true) {
+    sem_wait(m_sem_host);
+    syslog(LOG_DEBUG, "DEBUG: client aquired host-read semaphore");
+    syslog(LOG_DEBUG, "DEBUG: client reading host message");
+    if (m_conn->read(buf, 1000)) {
+      syslog(LOG_DEBUG, "DEBUG: client[%d] read \"%s\" from host", m_pid_client,
+             buf);
+      term << std::format("[host]: {}", buf) << std::endl;
+    } else {
+      syslog(LOG_DEBUG, "DEBUG: client[%d] read nothing from host",
+             m_pid_client);
+    }
+
+    int val;
+    sem_getvalue(m_sem_host, &val);
+    while (val != 0) {
+      sem_getvalue(m_sem_host, &val);
+    }
+  }
+}
+
+void Client::open_term() {
+  prctl(PR_SET_PDEATHSIG, SIGTERM);
+  int res = execl("/usr/bin/kitty", "kitty", "--", "bash", "-c",
+                  std::format("cp /dev/stdin {} | tail -f {}",
+                              m_term_stdin.c_str(), m_term_stdout.c_str())
+                      .c_str(),
+                  (char*)NULL);
+  if (res < 0) {
+    syslog(LOG_ERR, "ERROR: in execl(), client terminating");
+    exit(1);
+  }
+}
+
+void Client::fork_term_listener() {
+  switch (fork()) {
+    case -1:
+      syslog(LOG_ERR, "ERROR: in fork(), client terminating");
+      exit(1);
+      break;
+    case 0:
+      break;
+    default:
+      std::signal(SIGCHLD, [](int) {
+        syslog(LOG_INFO, "INFO: listener terminated => client terminating");
+        exit(0);
+      });
+      return;
+      break;
+  }
+
+  prctl(PR_SET_NAME, "term_listener");
+  prctl(PR_SET_PDEATHSIG, SIGTERM);
+
+  switch (fork()) {
+    case -1:
+      syslog(LOG_ERR, "ERROR: in fork(), client terminating");
+      exit(1);
+      break;
+    case 0:
+      open_term();
+      break;
+  }
 
   std::signal(SIGCHLD, [](int) {
-    syslog(LOG_INFO, "INFO: terminal closed, client terminating");
+    syslog(LOG_INFO, "INFO: terminal closed => listener terminating");
     kill(getpid(), SIGKILL);
   });
 
-  std::ifstream fin(m_term_stdin);
-  if (!fin.is_open()) {
-    syslog(LOG_ERR,
-           "ERROR: client can't open terminal stdin file, terminating");
-    exit(1);
-  }
-
+  std::ifstream tin(m_term_stdin);
   const int buf_size = 1000;
   char buf[buf_size];
   std::string line;
   while (true) {
-    if (std::getline(fin, line)) {
+    if (std::getline(tin, line) && line.size() != 0) {
       strcpy(buf, line.c_str());
+      sem_wait(m_sem_write);
+      syslog(LOG_DEBUG, "DEBUG: client aquired write semaphore");
+
       m_conn->write(buf, buf_size);
-      syslog(LOG_DEBUG, "DEBUG: client[%d] wrote \"%s\" to host", m_client_pid,
+      syslog(LOG_DEBUG, "DEBUG: client[%d] wrote \"%s\" to host", m_pid_client,
              buf);
-      sem_post(m_sem);
+      sem_post(m_sem_client);
+      sem_post(m_sem_write);
+      syslog(LOG_DEBUG, "DEBUG: client released write semaphore");
     }
-    fin.clear();
+    tin.clear();
   }
 }

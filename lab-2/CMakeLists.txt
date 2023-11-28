@@ -9,7 +9,7 @@ set (
   ./src/client.cpp
   ./src/connections/conn_pipe.cpp
   ./src/connections/conn_fifo.cpp
-  ./src/connections/conn_sock.cpp
+  # ./src/connections/conn_sock.cpp
 )
 
 add_executable(host ${SRC})
