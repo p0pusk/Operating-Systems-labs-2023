@@ -7,3 +7,8 @@
   - Программные каналы (pipe). TYPE_CODE - pipe.
   - Именованные каналы (mkfifo). TYPE_CODE - fifo.
   - Сокеты (socket). TYPE_CODE – sock
+
+---
+
+- Для работы требуется kitty терминал, в gnome-terminal по-другому
+  структурированы процессы
