@@ -5,7 +5,6 @@
 
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 #include "client.h"
 #include "conn.h"

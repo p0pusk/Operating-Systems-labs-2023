@@ -21,21 +21,31 @@
 #include <thread>
 
 #include "conn.h"
+#include "conn_fifo.h"
 #include "conn_pipe.h"
 
 Client::Client(ConnectionType conn_type) {
-  m_semaphore = sem_open("global_sem", 0);
-  if (m_semaphore == SEM_FAILED) {
-    sem_close(m_semaphore);
+  m_sem = sem_open("/host", 0);
+  if (m_sem == SEM_FAILED) {
+    sem_close(m_sem);
     syslog(LOG_ERR, "ERROR: failed to open semaphore");
     exit(1);
   }
 
-  int val;
-  sem_getvalue(m_semaphore, &val);
-  syslog(LOG_DEBUG, "client semaphore value %d", val);
-
   m_host_pid = getpid();
+  m_conn_type = conn_type;
+  switch (conn_type) {
+    case ConnectionType::PIPE:
+      m_conn = std::make_unique<ConnPipe>(m_host_pid);
+      break;
+    case ConnectionType::FIFO:
+      m_conn = std::make_unique<ConnFifo>(m_host_pid);
+      break;
+    default:
+      assert(1);
+      break;
+  }
+
   pid_t pid;
   switch (pid = fork()) {
     case -1:
@@ -50,19 +60,10 @@ Client::Client(ConnectionType conn_type) {
       m_client_pid = pid;
       break;
   }
-
-  switch (conn_type) {
-    case ConnectionType::PIPE:
-      m_conn = std::make_unique<ConnPipe>(m_host_pid, m_client_pid);
-      break;
-    default:
-      assert(1);
-      break;
-  }
 }
 
 Client::~Client() {
-  sem_close(m_semaphore);
+  sem_close(m_sem);
 }
 
 void Client::open_term() {
@@ -74,12 +75,14 @@ void Client::open_term() {
   _.close();
   std::ofstream fout(m_term_stdout);
 
-  switch (pid_t t_pid = fork()) {
+  m_term_pid = fork();
+  switch (m_term_pid) {
     case -1:
       syslog(LOG_ERR, "ERROR: in fork(), client terminating");
       exit(1);
       break;
     case 0:
+      prctl(PR_SET_PDEATHSIG, SIGTERM);
       int res = execl("/usr/bin/kitty", "kitty", "--", "bash", "-c",
                       std::format("cp /dev/stdin {} | tail -f {}",
                                   m_term_stdin.c_str(), m_term_stdout.c_str())
@@ -93,17 +96,22 @@ void Client::open_term() {
   }
 
   syslog(LOG_INFO, "INFO: created terminal for client");
-  fout << std::format("You are in child process {}. Type something:",
-                      m_client_pid)
+  std::string conn;
+  switch (m_conn_type) {
+    case ConnectionType::PIPE:
+      conn = "PIPE";
+      break;
+    case ConnectionType::FIFO:
+      conn = "FIFO";
+      break;
+  }
+  fout << std::format(
+              "You are in child process {}, connection type: \"{}\". Type "
+              "something:",
+              m_client_pid, conn)
        << std::endl;
 
   std::signal(SIGCHLD, SIG_IGN);
-
-  std::signal(SIGTERM, [](int signum) {
-    kill(getpid() + 1, SIGTERM);
-    syslog(LOG_INFO, "INFO: client and terminal terminating");
-    exit(0);
-  });
 
   std::signal(SIGCHLD, [](int) {
     syslog(LOG_INFO, "INFO: terminal closed, client terminating");
@@ -116,17 +124,17 @@ void Client::open_term() {
            "ERROR: client can't open terminal stdin file, terminating");
     exit(1);
   }
-  char buf[m_conn->BUFF_SIZE];
+
+  const int buf_size = 1000;
+  char buf[buf_size];
   std::string line;
   while (true) {
     if (std::getline(fin, line)) {
       strcpy(buf, line.c_str());
-      int val;
-      sem_getvalue(m_semaphore, &val);
-      syslog(LOG_DEBUG, "before wait client semaphore value %d", val);
-      sem_wait(m_semaphore);
-      m_conn->write(buf, m_conn->BUFF_SIZE);
-      sem_post(m_semaphore);
+      m_conn->write(buf, buf_size);
+      syslog(LOG_DEBUG, "DEBUG: client[%d] wrote \"%s\" to host", m_client_pid,
+             buf);
+      sem_post(m_sem);
     }
     fin.clear();
   }

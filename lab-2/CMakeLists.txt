@@ -6,13 +6,15 @@ set(CMAKE_CXX_STANDARD 20)
 set (
   SRC
   ./src/host.cpp
-  ./src/conn_pipe.cpp
   ./src/client.cpp
+  ./src/connections/conn_pipe.cpp
+  ./src/connections/conn_fifo.cpp
+  ./src/connections/conn_sock.cpp
 )
 
 add_executable(host ${SRC})
 
-target_include_directories(host PRIVATE ./inc)
+target_include_directories(host PRIVATE ./src ./src/connections)
 target_link_libraries(host PRIVATE pthread rt)
 
 

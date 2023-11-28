@@ -3,9 +3,11 @@
 #include <fcntl.h>
 #include <semaphore.h>
 #include <sys/syslog.h>
+#include <sys/wait.h>
 #include <syslog.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstring>
@@ -15,10 +17,10 @@
 #include <fstream>
 #include <future>
 #include <iostream>
-#include <semaphore>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "client.h"
 #include "conn.h"
@@ -31,17 +33,10 @@ Host& Host::getInstance() {
 
 Host::Host() {
   m_host_pid = getpid();
-  m_semaphore = sem_open("global", 0);
+  m_semaphore = sem_open("/host", 0);
   if (m_semaphore == SEM_FAILED) {
     sem_close(m_semaphore);
     syslog(LOG_ERR, "ERROR: failed to open semaphore");
-    exit(1);
-  }
-  int val;
-  sem_getvalue(m_semaphore, &val);
-  syslog(LOG_DEBUG, "host semaphore value %d", val);
-  if (m_semaphore == SEM_FAILED) {
-    syslog(LOG_ERR, "ERROR: in opening semaphore");
     exit(1);
   }
 
@@ -61,7 +56,19 @@ Host::Host() {
     exit(0);
   });
 
-  signal(SIGCHLD, SIG_IGN);
+  signal(SIGCHLD, [](int) {
+    pid_t pid;
+    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+      syslog(LOG_DEBUG, "DEBUG: caught terminating child %d", pid);
+      delete s_clients[pid];
+      s_clients.erase(pid);
+
+      if (s_clients.size() == 0) {
+        syslog(LOG_INFO, "INFO: No remaining clients, host terminating");
+        exit(0);
+      }
+    }
+  });
 }
 
 Host::~Host() {
@@ -84,32 +91,39 @@ void Host::create_client(ConnectionType id) {
 }
 
 void Host::run() {
-  char buf[1000];
+  const int buf_size = 1000;
+  char buf[buf_size];
   while (true) {
+    sem_wait(m_semaphore);
+    syslog(LOG_DEBUG, "DEBUG: host aquired semaphore");
     for (auto& c : s_clients) {
-      int val;
-      sem_getvalue(m_semaphore, &val);
-      syslog(LOG_DEBUG, "before wait host semaphore value %d", val);
-      sem_wait(m_semaphore);
-      c.second->m_conn->read(buf, 1000);
-      sem_post(m_semaphore);
+      syslog(LOG_DEBUG, "DEBUG: host reading %d", c.first);
+      if (c.second->m_conn->read(buf, buf_size)) {
+        syslog(LOG_DEBUG, "DEBUG: host read \"%s\" from %d", buf, c.first);
+      } else {
+        syslog(LOG_DEBUG, "DEBUG: host read nothing from %d", c.first);
+      }
     }
   }
 }
 
 auto main() -> int {
   openlog("host", LOG_NDELAY | LOG_PID, LOG_DAEMON);
-  sem_t* sem = sem_open("global", O_CREAT | O_EXCL, 0644, 1);
+  sem_unlink("/host");
+  sem_t* sem =
+      sem_open("/host", O_CREAT | O_EXCL, S_IRWXU | S_IRWXG | S_IRWXO, 0);
+  errno = 0;
   if (sem == SEM_FAILED) {
-    sem_destroy(sem);
-    std::cerr << "sem_open() failed" << std::endl;
+    sem_close(sem);
+    std::cerr << "sem_open() failed: " << errno << std::endl;
     exit(1);
   }
+
   syslog(LOG_INFO, "INFO: host starting...");
   Host& host = Host::getInstance();
   host.create_client(ConnectionType::PIPE);
-  std::this_thread::sleep_for(std::chrono::seconds(5));
-  host.create_client(ConnectionType::PIPE);
+  // std::this_thread::sleep_for(std::chrono::seconds(5));
+  host.create_client(ConnectionType::FIFO);
 
   host.run();
   sem_destroy(sem);

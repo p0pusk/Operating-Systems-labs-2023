@@ -1,12 +1,15 @@
 #include "conn_pipe.h"
 
-#include <fcntl.h>
+#include <poll.h>
+#include <stdio.h>
 #include <sys/syslog.h>
 #include <unistd.h>
 
 #include <csignal>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -16,7 +19,7 @@
 
 #include "conn.h"
 
-ConnPipe::ConnPipe(pid_t host_pid, pid_t client_pid) {
+ConnPipe::ConnPipe(pid_t host_pid) {
   int status = pipe(m_ptoc_desc);
   if (status == -1) {
     syslog(LOG_ERR, "ERROR: creating connection, in pipe()");
@@ -32,7 +35,6 @@ ConnPipe::ConnPipe(pid_t host_pid, pid_t client_pid) {
   }
 
   m_host_pid = host_pid;
-  m_client_pid = client_pid;
   syslog(LOG_INFO, "INFO: Pipe created");
 }
 
@@ -43,24 +45,38 @@ ConnPipe::~ConnPipe() {
   close(m_ctop_desc[1]);
 }
 
-void ConnPipe::write(void* buf, size_t size) {
+bool ConnPipe::write(void* buf, size_t size) {
+  bool res;
   pid_t pid = getpid();
+  int fd;
+  std::string who, to;
   if (pid == m_host_pid) {
-    ::write(m_ptoc_desc[1], buf, size);
-    syslog(LOG_INFO, "INFO: host wrote: %s", (char*)buf);
-  } else if (pid == m_client_pid) {
-    ::write(m_ctop_desc[1], buf, size);
-    syslog(LOG_INFO, "INFO: client wrote: %s", (char*)buf);
+    fd = m_ptoc_desc[1];
+  } else {
+    fd = m_ctop_desc[1];
   }
+  res = ::write(fd, buf, size);
+
+  return res;
 }
 
-void ConnPipe::read(void* buf, size_t size) {
+bool ConnPipe::read(void* buf, size_t size) {
   pid_t pid = getpid();
+  bool res = false;
+  int fd;
+  std::string who, from;
   if (pid == m_host_pid) {
-    ::read(m_ctop_desc[0], buf, size);
-    syslog(LOG_INFO, "INFO: host read: %s", (char*)buf);
-  } else if (pid == m_client_pid) {
-    ::read(m_ptoc_desc[0], buf, size);
-    syslog(LOG_INFO, "INFO: client read: %s", (char*)buf);
+    fd = m_ctop_desc[0];
+  } else {
+    fd = m_ptoc_desc[0];
   }
+
+  struct pollfd tmp;
+  tmp.fd = fd;
+  tmp.events = POLLIN;
+  if (poll(&tmp, 1, 0) == 1) {
+    res = ::read(fd, buf, size);
+  }
+
+  return res;
 }

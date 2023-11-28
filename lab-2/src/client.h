@@ -17,9 +17,11 @@ class Client {
 
  protected:
   pid_t m_host_pid;
-  sem_t* m_semaphore;
+  sem_t* m_sem;
   std::filesystem::path m_term_stdin;
   std::filesystem::path m_term_stdout;
 
-  void get_input();
+ private:
+  pid_t m_term_pid;
+  ConnectionType m_conn_type;
 };
