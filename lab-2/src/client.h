@@ -1,5 +1,7 @@
 #pragma once
 
+#include <semaphore.h>
+
 #include <memory>
 
 #include "conn.h"

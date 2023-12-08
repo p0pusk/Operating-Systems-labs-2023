@@ -12,7 +12,6 @@
 #include <climits>
 #include <csignal>
 #include <cstring>
-#include <format>
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -74,8 +73,8 @@ Client::Client(ConnectionType conn_type) {
       return;
   }
 
-  m_term_stdin = std::format("/tmp/lab2/{}.in", getpid());
-  m_term_stdout = std::format("/tmp/lab2/{}.out", getpid());
+  m_term_stdin = "/tmp/lab2/" + std::to_string(getpid()) + ".in";
+  m_term_stdout = "/tmp/lab2/" + std::to_string(getpid()) + ".out";
   std::ofstream in(m_term_stdin);
   std::ofstream out(m_term_stdout);
 }
@@ -105,10 +104,8 @@ void Client::run() {
   }
 
   std::ofstream term(m_term_stdout);
-  term << std::format(
-              "You are in child process {}, connection type: \"{}\". Type "
-              "something:",
-              m_pid_client, conn)
+  term << "You are in child process " + std::to_string(m_pid_client) +
+              " connection type: \"" + conn + "\". Type something:"
        << std::endl;
 
   char buf[1000];
@@ -119,7 +116,7 @@ void Client::run() {
     if (m_conn->read(buf, 1000)) {
       syslog(LOG_DEBUG, "DEBUG: client[%d] read \"%s\" from host", m_pid_client,
              buf);
-      term << std::format("[host]: {}", buf) << std::endl;
+      term << "[host]: " << buf << std::endl;
     } else {
       syslog(LOG_DEBUG, "DEBUG: client[%d] read nothing from host",
              m_pid_client);
@@ -136,8 +133,8 @@ void Client::run() {
 void Client::open_term() {
   prctl(PR_SET_PDEATHSIG, SIGTERM);
   int res = execl("/usr/bin/kitty", "kitty", "--", "bash", "-c",
-                  std::format("cp /dev/stdin {} | tail -f {}",
-                              m_term_stdin.c_str(), m_term_stdout.c_str())
+                  ("cp /dev/stdin " + m_term_stdin.string() + " | tail -f " +
+                   m_term_stdout.string())
                       .c_str(),
                   (char*)NULL);
   if (res < 0) {

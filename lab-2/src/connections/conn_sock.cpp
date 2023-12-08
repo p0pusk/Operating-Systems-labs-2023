@@ -7,8 +7,6 @@
 #include <unistd.h>
 
 ConnSocket::ConnSocket(pid_t host_pid) {
-  m_host_pid = host_pid;
-
   int new_socket;
   struct sockaddr_in address;
 

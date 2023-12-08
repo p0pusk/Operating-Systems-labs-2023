@@ -15,7 +15,6 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -67,7 +66,7 @@ Host::Host() {
     if (getpid() != s_pid_host) exit(0);
     for (auto& c : s_clients) {
       syslog(LOG_DEBUG, "%s",
-             std::format("DEBUG: killing {}", c.first).c_str());
+             ("DEBUG: killing " + std::to_string(c.first)).c_str());
       kill(c.first, SIGTERM);
     }
 
@@ -129,7 +128,7 @@ void Host::run() {
       syslog(LOG_DEBUG, "DEBUG: host reading %d", c.first);
       if (c.second->m_conn->read(buf, buf_size)) {
         syslog(LOG_DEBUG, "DEBUG: host read \"%s\" from %d", buf, c.first);
-        term << std::format("[{}]: {}", c.first, buf) << std::endl;
+        term << "[" << c.first << "]: " << buf << std::endl;
       } else {
         syslog(LOG_DEBUG, "DEBUG: host read nothing from %d", c.first);
       }
@@ -140,8 +139,8 @@ void Host::run() {
 void Host::open_terminal() {
   prctl(PR_SET_PDEATHSIG, SIGTERM);
   int res = execl("/usr/bin/kitty", "kitty", "--", "bash", "-c",
-                  std::format("cp /dev/stdin {} | tail -f {}",
-                              m_term_in.c_str(), m_term_out.c_str())
+                  ("cp /dev/stdin " + m_term_in.string() + " | tail -f " +
+                   m_term_out.string())
                       .c_str(),
                   (char*)NULL);
   if (res < 0) {

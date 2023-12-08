@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sys/poll.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <filesystem>
 #include <fstream>
