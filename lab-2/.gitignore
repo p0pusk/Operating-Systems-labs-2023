@@ -1,0 +1,5 @@
+host
+build/
+.cache
+compile_commands.json
+neovim.json
