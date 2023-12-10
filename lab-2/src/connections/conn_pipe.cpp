@@ -40,7 +40,7 @@ bool ConnPipe::write(void* buf, size_t size) {
 }
 
 bool ConnPipe::read(void* buf, size_t size) {
-  int res;
+  int res = -1;
   int fd = m_desc[0];
   struct pollfd tmp;
   tmp.fd = fd;
@@ -50,5 +50,5 @@ bool ConnPipe::read(void* buf, size_t size) {
     res = ::read(fd, buf, size);
   }
 
-  return res >= 0;
+  return res > 0;
 }
